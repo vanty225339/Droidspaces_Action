@@ -11,6 +11,7 @@ patch_files=(
     fs/read_write.c
     fs/stat.c
     drivers/input/input.c
+    kernel/reboot.c
 )
 
 for i in "${patch_files[@]}"; do
@@ -70,6 +71,25 @@ for i in "${patch_files[@]}"; do
     drivers/input/input.c)
         sed -i '/static void input_handle_event/i\#ifdef CONFIG_KSU\nextern bool ksu_input_hook __read_mostly;\nextern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);\n#endif\n' drivers/input/input.c
         sed -i '/int disposition = input_get_disposition(dev, type, code, &value);/a\	#ifdef CONFIG_KSU\n	if (unlikely(ksu_input_hook))\n		ksu_handle_input_handle_event(&type, &code, &value);\n	#endif' drivers/input/input.c
+        ;;
+
+    ## reboot.c
+    # KernelSU-Next legacy (v3.4.0) gates manual-hook mode on exactly one
+    # string: Kbuild greps for "ksu_handle_sys_reboot" in kernel/reboot.c.
+    # The exynos9810 tree already carries the other 5 hooks (exec/open/
+    # read_write/stat/input) with matching names and signatures, but no
+    # reboot hook, so Kbuild fails with "No hooks were defined" even
+    # though the 5 files are hooked. Add the 6th hook here. The call goes
+    # first inside sys_reboot, before the CAP_SYS_BOOT check, so the
+    # Manager supercall works for a non-root caller, as upstream does.
+    kernel/reboot.c)
+        sed -i '/SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,/i #ifdef CONFIG_KSU\nextern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n#endif' kernel/reboot.c
+        sed -i '/SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,/,/^{/{
+/^{/a\
+#ifdef CONFIG_KSU\
+\tksu_handle_sys_reboot(magic1, magic2, cmd, \&arg);\
+#endif
+}' kernel/reboot.c
         ;;
     esac
 
