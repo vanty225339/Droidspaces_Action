@@ -81,11 +81,12 @@ for i in "${patch_files[@]}"; do
     # reboot hook, so Kbuild fails with "No hooks were defined" even
     # though the 5 files are hooked. Add the 6th hook here. The call goes
     # first inside sys_reboot, before the CAP_SYS_BOOT check, so the
-    # Manager supercall works for a non-root caller, as upstream does.
+    # first inside sys_reboot, after the local declarations (avoids a
+    # C99 declaration-after-statement warning) and before the CAP_SYS_BOOT
+    # check, so the Manager supercall works for a non-root caller.
     kernel/reboot.c)
         sed -i '/SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,/i #ifdef CONFIG_KSU\nextern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n#endif' kernel/reboot.c
-        sed -i '/SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,/,/^{/{
-/^{/a\
+        sed -i '/SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,/,/int ret = 0;/{/int ret = 0;/a\
 #ifdef CONFIG_KSU\
 \tksu_handle_sys_reboot(magic1, magic2, cmd, \&arg);\
 #endif
